@@ -1,0 +1,443 @@
+(() => {
+const IS_SPA = window.location.pathname.startsWith("/app");
+
+const state = { projects: [], filter: "all", query: "", defaultRounds: 3, usage: null, usageRange: "daily", _tableBound: false };
+const $ = (id) => document.getElementById(id);
+
+function decorateIcons() {
+  $("topSearchIcon").innerHTML = Tracecraft.icon("search", 17);
+  $("newIcon").innerHTML = Tracecraft.icon("plus", 17);
+  $("refreshProjects").innerHTML = Tracecraft.icon("refresh", 17);
+  $("closeCreate").innerHTML = Tracecraft.icon("close", 17);
+}
+
+function renderRoundPicker() {
+  $("roundInput").value = state.defaultRounds;
+  $("roundPicker").innerHTML = [1, 2, 3, 4, 5].map((value) => `<button class="round-option${value === state.defaultRounds ? " active" : ""}" type="button" data-round="${value}">${value}</button>`).join("");
+}
+
+async function loadDefaults() {
+  try {
+    const config = await Tracecraft.api("/api/config");
+    state.defaultRounds = Number(config.default_rounds) || 3;
+  } catch (_) {
+    state.defaultRounds = 3;
+  }
+  renderRoundPicker();
+}
+
+// ─── Token 用量版块 ───────────────────────────────────────────
+
+const DAY_MS = 86400000;
+
+/** 本地时区的 YYYY-MM-DD（不能用 toISOString：它会转 UTC，东八区会偏移一天）。 */
+function localDateKey(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function formatTokens(value) {
+  const count = Number(value) || 0;
+  if (count >= 100000000) return `${(count / 100000000).toFixed(count >= 1000000000 ? 0 : 1)}亿`;
+  if (count >= 10000) return `${(count / 10000).toFixed(count >= 1000000 ? 0 : 1)}万`;
+  return count.toLocaleString("zh-CN");
+}
+
+function formatExactTokens(value) {
+  return (Number(value) || 0).toLocaleString("zh-CN");
+}
+
+function formatUsageDate(date) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  }).format(date);
+}
+
+function formatUsageDateRange(start, end) {
+  const formatter = new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric" });
+  return `${formatter.format(start)}–${formatter.format(end)}`;
+}
+
+function bucketDaily(daily) {
+  const map = new Map();
+  daily.forEach((row) => map.set(row.date, row));
+  return map;
+}
+
+/** 把每日数据按周（周一起算）合并，用于"每周"视图。 */
+function bucketWeekly(daily) {
+  const map = new Map();
+  daily.forEach((row) => {
+    const date = new Date(`${row.date}T00:00:00`);
+    const offset = (date.getDay() + 6) % 7;
+    const monday = new Date(date.getTime() - offset * DAY_MS);
+    const key = localDateKey(monday);
+    const existing = map.get(key) || { date: key, total_tokens: 0, calls: 0 };
+    existing.total_tokens += row.total_tokens;
+    existing.calls += row.calls;
+    map.set(key, existing);
+  });
+  return map;
+}
+
+/** 累计视图：逐日累加，展示消耗的增长曲线。 */
+function bucketCumulative(daily) {
+  const map = new Map();
+  let running = 0;
+  daily.forEach((row) => {
+    running += row.total_tokens;
+    map.set(row.date, { date: row.date, total_tokens: running, calls: row.calls });
+  });
+  return map;
+}
+
+function heatLevel(value, max) {
+  if (!value) return 0;
+  if (max <= 0) return 0;
+  const ratio = value / max;
+  if (ratio > 0.6) return 4;
+  if (ratio > 0.3) return 3;
+  if (ratio > 0.1) return 2;
+  return 1;
+}
+
+function renderUsageStats(usage) {
+  const hasData = usage.total_tokens > 0;
+  const cards = [
+    ["累计 Token 数", hasData ? formatTokens(usage.total_tokens) : "—"],
+    ["峰值单日 Token", hasData ? formatTokens(usage.peak_daily_tokens) : "—"],
+    ["模型调用次数", hasData ? usage.calls.toLocaleString("zh-CN") : "—"],
+    ["当前连续天数", hasData ? `${usage.current_streak} 天` : "—"],
+    ["最长连续天数", hasData ? `${usage.longest_streak} 天` : "—"],
+  ];
+  $("usageStats").innerHTML = cards.map(([label, value]) => `<div class="usage-stat${hasData ? "" : " muted-value"}"><strong>${Tracecraft.escapeHtml(value)}</strong><small>${label}</small></div>`).join("");
+}
+
+function renderUsageHeatmap(usage) {
+  hideUsageTooltip();
+  const days = Math.max(7, Number(usage.days) || 364);
+  const buckets = state.usageRange === "weekly"
+    ? bucketWeekly(usage.daily || [])
+    : state.usageRange === "total"
+      ? bucketCumulative(usage.daily || [])
+      : bucketDaily(usage.daily || []);
+  const max = Math.max(0, ...Array.from(buckets.values(), (row) => row.total_tokens));
+
+  // 末列对齐本周，首列回退到 days 天前的周一，保证 7 行对应周一至周日
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const endOffset = (today.getDay() + 6) % 7;
+  const lastMonday = new Date(today.getTime() - endOffset * DAY_MS);
+  const weeks = Math.ceil(days / 7);
+  const start = new Date(lastMonday.getTime() - (weeks - 1) * 7 * DAY_MS);
+
+  const cells = [];
+  const monthLabels = [];
+  let lastMonth = -1;
+  for (let week = 0; week < weeks; week += 1) {
+    const columnStart = new Date(start.getTime() + week * 7 * DAY_MS);
+    const month = columnStart.getMonth();
+    monthLabels.push(month === lastMonth ? "" : `${month + 1}月`);
+    lastMonth = month;
+    for (let day = 0; day < 7; day += 1) {
+      const current = new Date(columnStart.getTime() + day * DAY_MS);
+      if (current > today) { cells.push('<i class="usage-cell is-empty"></i>'); continue; }
+      const key = localDateKey(current);
+      const lookup = state.usageRange === "weekly" ? localDateKey(columnStart) : key;
+      const row = buckets.get(lookup);
+      const value = row ? row.total_tokens : 0;
+      let title = formatUsageDate(current);
+      let metric = "当日用量";
+      let detail = `${row ? row.calls : 0} 次模型调用`;
+      if (state.usageRange === "weekly") {
+        const weekEnd = new Date(Math.min(today.getTime(), columnStart.getTime() + 6 * DAY_MS));
+        title = formatUsageDateRange(columnStart, weekEnd);
+        metric = "本周用量";
+      } else if (state.usageRange === "total") {
+        metric = "截至当日累计";
+        detail = "";
+      }
+      const ariaLabel = `${title}，${metric} ${formatExactTokens(value)} Token${detail ? `，${detail}` : ""}`;
+      cells.push(`<i class="usage-cell level-${heatLevel(value, max)}" data-usage-tooltip data-tooltip-title="${Tracecraft.escapeHtml(title)}" data-tooltip-metric="${metric}" data-tooltip-value="${formatExactTokens(value)}" data-tooltip-detail="${detail}" aria-label="${Tracecraft.escapeHtml(ariaLabel)}"></i>`);
+    }
+  }
+  $("usageHeatmap").innerHTML = cells.join("");
+  $("usageMonths").innerHTML = monthLabels.map((label) => `<span>${label}</span>`).join("");
+}
+
+function positionUsageTooltip(event) {
+  const tooltip = $("usageTooltip");
+  if (!tooltip || !tooltip.classList.contains("visible")) return;
+  const gap = 14;
+  const edge = 8;
+  let left = event.clientX + gap;
+  let top = event.clientY + gap;
+  const rect = tooltip.getBoundingClientRect();
+  if (left + rect.width > window.innerWidth - edge) left = event.clientX - rect.width - gap;
+  if (top + rect.height > window.innerHeight - edge) top = event.clientY - rect.height - gap;
+  tooltip.style.left = `${Math.max(edge, left)}px`;
+  tooltip.style.top = `${Math.max(edge, top)}px`;
+}
+
+function showUsageTooltip(cell, event) {
+  const tooltip = $("usageTooltip");
+  if (!tooltip) return;
+  tooltip.querySelector("[data-tooltip-title]").textContent = cell.dataset.tooltipTitle;
+  tooltip.querySelector("[data-tooltip-metric]").textContent = cell.dataset.tooltipMetric;
+  tooltip.querySelector("[data-tooltip-value]").textContent = `${cell.dataset.tooltipValue} Token`;
+  const detail = tooltip.querySelector("[data-tooltip-detail]");
+  detail.textContent = cell.dataset.tooltipDetail;
+  detail.hidden = !cell.dataset.tooltipDetail;
+  tooltip.classList.add("visible");
+  tooltip.setAttribute("aria-hidden", "false");
+  positionUsageTooltip(event);
+}
+
+function hideUsageTooltip() {
+  const tooltip = $("usageTooltip");
+  if (!tooltip) return;
+  tooltip.classList.remove("visible");
+  tooltip.setAttribute("aria-hidden", "true");
+}
+
+function bindUsageTooltip() {
+  const heatmap = $("usageHeatmap");
+  const tooltip = $("usageTooltip");
+  if (tooltip.parentElement !== document.body) document.body.appendChild(tooltip);
+  let rafId = 0;
+  heatmap.addEventListener("pointerover", (event) => {
+    const cell = event.target.closest("[data-usage-tooltip]");
+    if (cell) showUsageTooltip(cell, event);
+  });
+  heatmap.addEventListener("pointermove", (event) => {
+    // rAF 节流：避免 pointermove 高频触发时每帧强制 getBoundingClientRect
+    if (rafId) return;
+    rafId = window.requestAnimationFrame(() => {
+      rafId = 0;
+      positionUsageTooltip(event);
+    });
+  });
+  heatmap.addEventListener("pointerleave", () => {
+    if (rafId) { window.cancelAnimationFrame(rafId); rafId = 0; }
+    hideUsageTooltip();
+  });
+}
+
+function renderUsageRows(target, rows, labelKey) {
+  if (!rows.length) {
+    $(target).innerHTML = '<p class="usage-empty">暂无数据，运行一次调研后即可看到分布。</p>';
+    return;
+  }
+  const max = Math.max(...rows.map((row) => row.total_tokens));
+  $(target).innerHTML = rows.slice(0, 6).map((row) => {
+    const percent = max > 0 ? Math.max(3, (row.total_tokens / max) * 100) : 3;
+    return `<div class="usage-row"><span title="${Tracecraft.escapeHtml(row[labelKey])}">${Tracecraft.escapeHtml(row[labelKey])}</span><span>${formatTokens(row.total_tokens)}</span><div class="usage-row-bar"><i style="width:${percent}%"></i></div></div>`;
+  }).join("");
+}
+
+function renderUsage() {
+  const usage = state.usage;
+  if (!usage) return;
+  renderUsageStats(usage);
+  renderUsageHeatmap(usage);
+  renderUsageRows("usageStages", usage.stages || [], "stage");
+  renderUsageRows("usageProjects", usage.projects || [], "topic");
+}
+
+async function loadUsage() {
+  try {
+    state.usage = await Tracecraft.api("/api/usage");
+    renderUsage();
+  } catch (error) {
+    $("usageStats").innerHTML = `<p class="usage-empty">用量数据读取失败：${Tracecraft.escapeHtml(error.message)}</p>`;
+  }
+}
+
+function needsUserInput(project) {  return Boolean(project.checkpoint) || project.stage === "await_clarification";
+}
+
+function matchesFilter(project) {
+  if (state.filter === "running") return project.running;
+  if (state.filter === "approval") return needsUserInput(project);
+  if (state.filter === "done") return project.stage === "done";
+  if (state.filter === "failed") return Boolean(project.failed) || project.job_status === "error";
+  return true;
+}
+
+function visibleProjects() {
+  const query = state.query.trim().toLowerCase();
+  return state.projects.filter(matchesFilter).filter((project) => !query || project.topic.toLowerCase().includes(query));
+}
+
+function renderSummary() {
+  const total = state.projects.length;
+  const running = state.projects.filter((item) => item.running).length;
+  const approvals = state.projects.filter(needsUserInput).length;
+  const done = state.projects.filter((item) => item.stage === "done").length;
+  const failed = state.projects.filter((item) => item.failed || item.job_status === "error").length;
+  const values = [["全部研究", total, 100], ["正在运行", running, total ? running / total * 100 : 0], ["等待审批", approvals, total ? approvals / total * 100 : 0], ["已完成", done, total ? done / total * 100 : 0], ["失败待处理", failed, total ? failed / total * 100 : 0]];
+  $("summaryStrip").innerHTML = values.map(([label, value, percent]) => `<article class="panel summary-card"><span><small>${label}</small><strong>${value}</strong></span><i class="summary-ring" style="--value:${Math.max(4, percent)}%"></i></article>`).join("");
+}
+
+function renderProjects() {
+  const projects = visibleProjects();
+  if (!projects.length) {
+    $("projectTable").innerHTML = `<div class="empty"><span class="empty-symbol">✦</span><strong>${state.projects.length ? "没有匹配的研究" : "还没有研究项目"}</strong><p>${state.projects.length ? "尝试切换状态或搜索其他关键词。" : "创建第一个研究，研迹会从规划、搜集到报告生成全程推进。"}</p><button class="button primary" type="button" data-open-create>${Tracecraft.icon("plus", 16)}新建调研</button></div>`;
+    $("projectTable").querySelector("[data-open-create]")?.addEventListener("click", openDrawer);
+    return;
+  }
+  $("projectTable").innerHTML = `<table class="data-table"><thead><tr><th>项目名称</th><th>当前阶段</th><th>采集轮次</th><th>最近更新</th><th>运行状态</th><th>待审批提醒</th><th class="align-right">操作</th></tr></thead><tbody>${projects.map((project) => {
+    const tone = Tracecraft.stageTone(project);
+    const failed = Boolean(project.failed) || project.job_status === "error";
+    const status = project.running ? "运行中" : failed ? "失败" : project.stage === "done" ? "已完成" : project.stage === "await_clarification" ? "待澄清" : project.checkpoint ? "待审批" : "已暂停";
+    const id = Tracecraft.escapeHtml(project.id);
+    const retryButton = project.can_retry
+      ? `<button class="icon-button" type="button" data-retry="${id}" title="重试失败阶段">${Tracecraft.icon("refresh", 16)}</button>`
+      : "";
+    const failureHint = failed && project.last_error
+      ? `<small class="row-error" title="${Tracecraft.escapeHtml(project.last_error)}">${Tracecraft.escapeHtml(project.last_error.slice(0, 60))}${project.last_error.length > 60 ? "…" : ""}</small>`
+      : "";
+    return `<tr><td><a class="table-title row-link" href="/app/workspace?project=${encodeURIComponent(project.id)}"><strong>${Tracecraft.escapeHtml(project.topic)}</strong><small>${id}</small></a></td><td>${Tracecraft.stageLabel(project.stage)}</td><td>${project.collect_round} / ${project.max_collect_rounds}</td><td>${Tracecraft.formatDate(project.updated_at)}</td><td><span class="status-pill ${tone}"><i class="status-dot ${tone}"></i>${status}</span>${failureHint}</td><td>${project.stage === "await_clarification" ? '<span class="status-pill warning">需求澄清待回答</span>' : project.checkpoint ? `<span class="status-pill warning">1 项待审批</span>` : '<span class="muted">—</span>'}</td><td><div class="row-actions">${retryButton}<button class="icon-button danger" type="button" data-delete="${id}" title="删除项目"${project.running ? " disabled" : ""}>${Tracecraft.icon("trash", 16)}</button><a class="icon-button" href="/app/workspace?project=${encodeURIComponent(project.id)}" title="打开项目">${Tracecraft.icon("arrow", 16)}</a></div></td></tr>`;
+  }).join("")}</tbody></table>`;
+  // 事件委托：容器上绑一次，行重绘后无需逐个绑定
+  if (!state._tableBound) {
+    state._tableBound = true;
+    $("projectTable").addEventListener("click", (event) => {
+      const retry = event.target.closest("[data-retry]");
+      const del = event.target.closest("[data-delete]");
+      if (retry) retryProject(retry.dataset.retry, retry);
+      else if (del) deleteProject(del.dataset.delete, del);
+    });
+  }
+}
+
+async function retryProject(projectId, button) {
+  Tracecraft.setButtonBusy(button, true, "");
+  try {
+    const result = await Tracecraft.api(`/api/projects/${encodeURIComponent(projectId)}/retry`, { method: "POST", body: JSON.stringify({ extra_rounds: 1 }) });
+    Tracecraft.toast(result.message || "已重新开始运行");
+  } catch (error) { Tracecraft.toast(error.message, "danger"); }
+  finally { Tracecraft.setButtonBusy(button, false); await loadProjects(); }
+}
+
+async function deleteProject(projectId, button) {
+  const project = state.projects.find((item) => item.id === projectId);
+  const confirmed = await Tracecraft.confirmAction({
+    title: "删除项目",
+    message: `将永久删除「${project?.topic || projectId}」及其全部产物，操作不可恢复。`,
+    confirmLabel: "永久删除",
+  });
+  if (!confirmed) return;
+  Tracecraft.setButtonBusy(button, true, "");
+  try {
+    await Tracecraft.api(`/api/projects/${encodeURIComponent(projectId)}`, { method: "DELETE" });
+    if (localStorage.getItem("tracecraft.project") === projectId) localStorage.removeItem("tracecraft.project");
+    Tracecraft.toast("项目已删除", "warning");
+  } catch (error) { Tracecraft.toast(error.message, "danger"); }
+  finally { Tracecraft.setButtonBusy(button, false); await loadProjects(); }
+}
+
+async function loadProjects() {
+  try {
+    const data = await Tracecraft.api("/api/projects");
+    state.projects = data.projects;
+    renderSummary();
+    renderProjects();
+  } catch (error) {
+    $("projectTable").innerHTML = `<div class="empty"><span class="empty-symbol">!</span><strong>项目加载失败</strong><p>${Tracecraft.escapeHtml(error.message)}</p><button class="button secondary" data-retry>重试</button></div>`;
+    $("projectTable").querySelector("[data-retry]")?.addEventListener("click", loadProjects);
+  }
+}
+
+function openDrawer() {
+  $("createDrawer").classList.add("open");
+  $("createDrawer").setAttribute("aria-hidden", "false");
+  window.setTimeout(() => $("topicInput").focus(), 50);
+}
+
+function closeDrawer() {
+  $("createDrawer").classList.remove("open");
+  $("createDrawer").setAttribute("aria-hidden", "true");
+}
+
+async function createProject(event) {
+  event.preventDefault();
+  const button = $("submitCreate");
+  Tracecraft.setButtonBusy(button, true, "创建中");
+  try {
+    const project = await Tracecraft.api("/api/projects", { method: "POST", body: JSON.stringify({ topic: $("topicInput").value, brief: $("briefInput").value, max_collect_rounds: Number($("roundInput").value) }) });
+    Tracecraft.rememberProject(project.id);
+    const target = `/app/workspace?project=${encodeURIComponent(project.id)}`;
+    if (window.Tracecraft?.navigate) Tracecraft.navigate(target);
+    else window.location.href = target;
+  } catch (error) {
+    Tracecraft.toast(error.message, "danger");
+    Tracecraft.setButtonBusy(button, false);
+  }
+}
+
+function bindEvents() {
+  bindUsageTooltip();
+  $("openCreate").addEventListener("click", openDrawer);
+  $("closeCreate").addEventListener("click", closeDrawer);
+  $("cancelCreate").addEventListener("click", closeDrawer);
+  $("createDrawer").addEventListener("click", (event) => { if (event.target === $("createDrawer")) closeDrawer(); });
+  $("createForm").addEventListener("submit", createProject);
+  $("refreshProjects").addEventListener("click", () => { loadProjects(); loadUsage(); });
+  $("projectSearch").addEventListener("input", Tracecraft.debounce((event) => { state.query = event.target.value; renderProjects(); }, 160));
+  $("filterTabs").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-filter]");
+    if (!button) return;
+    state.filter = button.dataset.filter;
+    $("filterTabs").querySelectorAll(".filter-tab").forEach((item) => item.classList.toggle("active", item === button));
+    renderProjects();
+  });
+  $("roundPicker").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-round]");
+    if (!button) return;
+    $("roundInput").value = button.dataset.round;
+    $("roundPicker").querySelectorAll(".round-option").forEach((item) => item.classList.toggle("active", item === button));
+  });
+  $("usageRangeTabs").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-range]");
+    if (!button) return;
+    state.usageRange = button.dataset.range;
+    $("usageRangeTabs").querySelectorAll(".filter-tab").forEach((item) => item.classList.toggle("active", item === button));
+    renderUsage();
+  });
+}
+
+function init() {
+  decorateIcons();
+  bindEvents();
+  if (new URLSearchParams(window.location.search).get("new") === "1") openDrawer();
+  loadDefaults();
+  loadProjects();
+  loadUsage();
+}
+
+function destroy() {
+  hideUsageTooltip();
+  $("usageTooltip")?.remove();
+  state.projects = [];
+  state.usage = null;
+  state._tableBound = false;
+  state.filter = "all";
+  state.query = "";
+  state.usageRange = "daily";
+}
+
+// SPA：注册视图供 router 调用；旧 /research 页面直接初始化。
+if (window.Tracecraft?.views?.register) {
+  Tracecraft.views.register("research", { init, destroy });
+}
+if (!IS_SPA) {
+  Tracecraft.mountShell("home");
+  init();
+}
+})();

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>研迹 · 本地多智能体调研工作台</title>
+    <script>document.documentElement.classList.add("motion-enabled");</script>
+    <link rel="stylesheet" href="/static/styles.css?v=20260827-tracecraft4" />
+    <link rel="stylesheet" href="/static/design-tokens.css?v=20260827-tracecraft4" />
+    <script src="/static/landing.js?v=20260827-tracecraft4" defer></script>
+  </head>
+  <body class="landing-body">
+    <header class="landing-header">
+      <a class="brand landing-brand" href="/" aria-label="研迹首页">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40" fill="none"><path d="M7 8h26M20 8v25M12 33l8-8 8 8"/><circle cx="20" cy="21" r="3.5"/></svg></span>
+        <span><strong>研迹</strong><small>TRACECRAFT</small></span>
+      </a>
+      <nav class="landing-nav" aria-label="首页导航">
+        <a href="#product" aria-current="page">产品</a>
+        <a href="#workflow">流程</a>
+        <a href="/app/research">工作台</a>
+        <a href="/app/results">成果</a>
+        <a href="/app/settings">设置</a>
+      </nav>
+      <a class="button primary landing-start" href="/app/research"><span class="button-icon" aria-hidden="true">→</span> 开始调研</a>
+    </header>
+
+    <main>
+      <section class="landing-hero">
+        <div class="hero-content">
+          <h1>研迹</h1>
+          <p class="hero-subtitle">协同完成资料搜集、分析验证与成果交付的多智能体调研工作台</p>
+          <div id="workflow" class="hero-flow" aria-label="研究流程">
+            <div class="flow-step" style="--flow-step-delay: 0s;"><span class="flow-step-label">规划</span></div>
+            <div class="flow-step" style="--flow-step-delay: .5s;"><span class="flow-step-label">搜集</span></div>
+            <div class="flow-step" style="--flow-step-delay: 1s;"><span class="flow-step-label">验证</span></div>
+            <div class="flow-step" style="--flow-step-delay: 1.5s;"><span class="flow-step-label">补采</span></div>
+            <div class="flow-step" style="--flow-step-delay: 2s;"><span class="flow-step-label">分析</span></div>
+            <div class="flow-step" style="--flow-step-delay: 2.5s;"><span class="flow-step-label">报告生成</span></div>
+          </div>
+          <div class="hero-actions">
+            <a class="button primary" href="/app/research"><span class="button-icon" aria-hidden="true">→</span> 进入工作台</a>
+            <a class="button secondary" href="#product"><span class="button-icon" aria-hidden="true">◎</span> 查看能力</a>
+            <a class="button secondary" href="/app/research?new=1"><span class="button-icon" aria-hidden="true">＋</span> 新建调研</a>
+          </div>
+        </div>
+        <section class="hero-capabilities" aria-label="核心能力">
+          <article class="hero-capability">
+            <span class="capability-glyph glyph-shield" aria-hidden="true"></span>
+            <span><strong>可信研究内核</strong><small>证据链路</small><p>可验证、可溯源的研究证据链</p></span>
+          </article>
+          <article class="hero-capability">
+            <span class="capability-glyph glyph-loop" aria-hidden="true"></span>
+            <span><strong>多智能体协同</strong><small>协同工作流</small><p>专业智能体协同完成复杂调研</p></span>
+          </article>
+          <article class="hero-capability featured">
+            <span class="capability-glyph glyph-cube" aria-hidden="true"></span>
+            <span><strong>本地安全运行</strong><small>本地部署</small><p>数据不出本地，安全可控</p></span>
+          </article>
+          <article class="hero-capability">
+            <span class="capability-glyph glyph-shield" aria-hidden="true"></span>
+            <span><strong>可信研究内核</strong><small>证据链路</small><p>可验证、可溯源的研究证据链</p></span>
+          </article>
+          <article class="hero-capability">
+            <span class="capability-glyph glyph-loop" aria-hidden="true"></span>
+            <span><strong>多智能体协同</strong><small>协同工作流</small><p>专业智能体协同完成复杂调研</p></span>
+          </article>
+        </section>
+      </section>
+
+      <section id="product" class="landing-products" aria-labelledby="productTitle">
+        <header class="landing-section-heading">
+          <span class="section-kicker">研究闭环</span>
+          <h2 id="productTitle">从问题出发，到成果交付</h2>
+          <p>规划、搜集、验证、分析与报告生成，在同一个工作台中连续推进。</p>
+        </header>
+        <div class="landing-features">
+          <a class="landing-feature" href="/app/research">
+            <div class="feature-topline"><span class="feature-icon">⌂</span><span class="feature-number">01</span></div>
+            <span class="feature-label">任务控制</span><h2>研究首页</h2>
+            <p class="feature-summary">从一个研究主题开始，集中掌握任务状态、审批节点与下一步动作。</p>
+            <div class="feature-mini" aria-hidden="true"><span></span><span></span><span></span></div>
+            <ul class="feature-points"><li>任务状态与进度总览</li><li>检查点审批与继续运行</li></ul>
+            <span class="feature-enter">进入研究首页 <b>→</b></span>
+          </a>
+          <a class="landing-feature" href="/app/workspace">
+            <div class="feature-topline"><span class="feature-icon">□</span><span class="feature-number">02</span></div>
+            <span class="feature-label">智能体工作区</span><h2>项目工作区</h2>
+            <p class="feature-summary">实时跟随 Agent 的执行轨迹，把轮次、日志、检查点和项目产物放在同一视野。</p>
+            <div class="feature-mini lines" aria-hidden="true"><span></span><span></span><span></span></div>
+            <ul class="feature-points"><li>轮次、日志与阶段时间线</li><li>并排阅读项目产物</li></ul>
+            <span class="feature-enter">打开项目工作区 <b>→</b></span>
+          </a>
+          <a class="landing-feature" href="/app/materials">
+            <div class="feature-topline"><span class="feature-icon">◇</span><span class="feature-number">03</span></div>
+            <span class="feature-label">研究材料库</span><h2>材料中心</h2>
+            <p class="feature-summary">统一接入、解析和检索研究材料，让分散的信息沉淀为可复用的资产库。</p>
+            <div class="feature-mini files" aria-hidden="true"><span></span><span></span><span></span></div>
+            <ul class="feature-points"><li>解析、OCR 与元数据管理</li><li>检索、版本比较与归档</li></ul>
+            <span class="feature-enter">管理研究材料 <b>→</b></span>
+          </a>
+          <a class="landing-feature" href="/app/results">
+            <div class="feature-topline"><span class="feature-icon">▥</span><span class="feature-number">04</span></div>
+            <span class="feature-label">成果交付</span><h2>成果中心</h2>
+            <p class="feature-summary">集中预览洞察、Markdown 草案和正式报告，把研究结果整理成可交付文件。</p>
+            <div class="feature-mini chart" aria-hidden="true"><span></span><span></span><span></span></div>
+            <ul class="feature-points"><li>Markdown 与正式报告预览</li><li>PDF、TeX 与交付文件导出</li></ul>
+            <span class="feature-enter">查看研究成果 <b>→</b></span>
+          </a>
+          <a class="landing-feature" href="/app/settings">
+            <div class="feature-topline"><span class="feature-icon">⚙</span><span class="feature-number">05</span></div>
+            <span class="feature-label">本地配置</span><h2>设置</h2>
+            <p class="feature-summary">调整模型、搜索、Embedding 与本地存储配置，让工作台适配你的研发环境。</p>
+            <div class="feature-mini settings" aria-hidden="true"><span></span><span></span><span></span></div>
+            <ul class="feature-points"><li>服务连通性与参数检查</li><li>本地路径和默认轮次配置</li></ul>
+            <span class="feature-enter">检查工作台设置 <b>→</b></span>
+          </a>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

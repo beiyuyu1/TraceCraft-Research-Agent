@@ -1,0 +1,53 @@
+[project]
+name = "research-agent"
+version = "0.1.0"
+description = "通用行业调研 Multi-Agent（模型无关，支持任何 OpenAI 兼容 API）"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "ruihang" }]
+
+dependencies = [
+    "httpx>=0.27",
+    "anyio>=4.0",
+    "python-dotenv>=1.0",
+    "rich>=13.0",
+    "pydantic>=2.0",
+    "beautifulsoup4>=4.12",
+    "pypdf>=5.0",
+    "python-docx>=1.1",
+    "openpyxl>=3.1",
+    "python-pptx>=1.0",
+    "Pillow>=10.0",
+    "striprtf>=0.0.29",
+    "PyMuPDF>=1.24",
+    "pytesseract>=0.3.13",
+    "python-multipart>=0.0.9",
+    "bleach>=6.1",
+    "certifi>=2024.0",
+    "matplotlib>=3.8",
+    "pypandoc-binary>=1.15",
+    "vl-convert-python>=1.7",
+]
+
+[project.optional-dependencies]
+search = ["ddgs>=9.14", "duckduckgo-search>=6.0"]
+web = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "reportlab>=4.0"]
+dev = [
+    "pytest>=8.0",
+    "pytest-anyio>=0.0",
+    "httpx>=0.27",
+    "anyio>=4.0",
+]
+
+[project.scripts]
+research-agent = "research_agent.__main__:main"
+research-agent-web = "research_agent.web_app:main"
+research-agent-source-worker = "research_agent.sources.jobs:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/research_agent"]

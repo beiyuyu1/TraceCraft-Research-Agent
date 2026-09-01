@@ -1,0 +1,52 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{brokerage-report}[2026/07/19 Chinese brokerage report style]
+\RequirePackage[a4paper,left=21mm,right=19mm,top=22mm,bottom=21mm,headheight=22pt]{geometry}
+\RequirePackage{xcolor}
+\RequirePackage{fancyhdr}
+\RequirePackage{titlesec}
+\RequirePackage{enumitem}
+\RequirePackage{caption}
+\RequirePackage{float}
+\RequirePackage{setspace}
+\RequirePackage{etoolbox}
+% 颜色命令由 brokerage-tokens.tex 生成（单一来源 design-tokens.json），命令名保持不变。
+% report_formatting.py 在拷贝 sty 时同时生成 brokerage-tokens.tex 到项目目录。
+\input{brokerage-tokens.tex}
+\color{BrokerText}
+\setstretch{1.32}
+\setlength{\parindent}{2em}
+\setlength{\parskip}{2pt}
+\setlist{nosep,leftmargin=2em}
+\titleformat{\section}{\Large\bfseries\color{BrokerBlue}}{\thesection}{0.8em}{}[\vspace{2pt}\color{BrokerGold}\titlerule]
+\titleformat{\subsection}{\large\bfseries\color{BrokerBlue}}{\thesubsection}{0.7em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{BrokerText}}{\thesubsubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{18pt}{10pt}
+\titlespacing*{\subsection}{0pt}{14pt}{7pt}
+\captionsetup{font=small,labelfont=bf,labelsep=space,justification=centering}
+\floatplacement{figure}{htbp}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{BrokerMuted}Research Agent 深度研究}
+\fancyhead[R]{\small\color{BrokerMuted}\leftmark}
+\fancyfoot[C]{\small\color{BrokerMuted}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{BrokerGrid}\leaders\hrule height \headrulewidth\hfill}}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{3.5pt}
+\setlength{\emergencystretch}{3em}
+% Narrow research tables hold domains, ids and locators with no natural break
+% points. Allowing hyphenation-free relaxation inside them keeps content on the
+% page instead of producing Overfull \hbox that blocks delivery.
+\AtBeginEnvironment{longtable}{%
+  \small\sloppy
+  \setlength{\emergencystretch}{4em}%
+  \relpenalty=9999 \binoppenalty=9999
+}
+\makeatletter
+\newcommand{\BrokerNeedSpace}[1]{%
+  \begingroup\setlength{\dimen@}{#1}%
+  \vskip\z@\@plus\dimen@\penalty-100%
+  \vskip\z@\@plus-\dimen@\vskip\dimen@\penalty9999%
+  \vskip-\dimen@\vskip\z@skip\endgroup}
+\makeatother
+\pretocmd{\section}{\BrokerNeedSpace{0.30\textheight}}{}{}
